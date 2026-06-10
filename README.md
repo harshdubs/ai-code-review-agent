@@ -4,10 +4,8 @@ emoji: 🔍
 colorFrom: blue
 colorTo: purple
 sdk: gradio
-sdk_version: 4.0.0
+sdk_version: 4.44.0
 app_file: app.py
 pinned: false
+python_version: 3.11
 ---
-
-# AI Code Review Agent
-LangGraph multi-agent system that reviews code for bugs, security vulnerabilities, and performance issues — then fixes and tests it automatically.
