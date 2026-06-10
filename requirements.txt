@@ -4,7 +4,7 @@ langchain-community
 langchain-core
 langchain-tavily
 langchain-openai
-gradio==4.44.0
+gradio==5.9.1
 python-dotenv
 requests
 pypdf
