@@ -51,16 +51,18 @@ def fetch_code(state: AgentState):
 
 
 def bug_reviewer(state: AgentState):
-    print(">>bug reviewer running...")
-    response = invoke_with_retry(llm_fast, f"""Review the following code for bugs, logic errors, unhandled exceptions, 
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+    response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for bugs, logic errors, unhandled exceptions, 
         off-by-one errors, null/undefined checks, and incorrect conditions. 
         For each bug found, explain what it is, why it's a problem, and suggest 
         a specific fix. Format as numbered list. Code: {state["raw_code"]}""")  
     return {"bug_review" : response.content}
 
 def security_reviewer(state: AgentState):
-    print("security reviewer running....")
-    response = invoke_with_retry(llm_fast, f"""Review the following code for security vulnerabilities including SQL injection, 
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+    response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for security vulnerabilities including SQL injection, 
         hardcoded secrets or API keys, unvalidated user inputs, insecure dependencies, 
         exposed sensitive data, and authentication issues. For each vulnerability found, 
         rate its severity (High/Medium/Low), explain the risk, and suggest a fix. 
@@ -68,8 +70,9 @@ def security_reviewer(state: AgentState):
     return {"security_review" : response.content}
 
 def performance_reviewer(state: AgentState):
-    print("performance reviewer running....")
-    response = invoke_with_retry(llm_fast, f"""Review the following code for performance issues including unnecessary loops, 
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+    response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for performance issues including unnecessary loops, 
         inefficient data structures, redundant API or database calls, memory leaks, 
         blocking operations, and algorithmic complexity issues. For each issue found, 
         explain the impact and suggest an optimized approach. 
@@ -88,28 +91,36 @@ def report_generator(state: AgentState):
     return {"final_report" : response.content}
 
 def code_fixer(state: AgentState):
-    print("code fixer  running ........")
-    truncated_report = truncate_code(state["final_report"], max_chars=1000)
-    response = invoke_with_retry(llm_fast, f"""You are fixing the code below. 
-        Do NOT rewrite it from scratch. 
-        Do NOT replace it with different code.
-        ONLY fix the specific issues mentioned in the review.
-        Return the SAME code with ONLY the identified issues fixed.
+    print("code fixer running.....")
+    response = invoke_with_retry(llm, f"""You are fixing ONLY confirmed HIGH severity bugs in the code below.
+        STRICT RULES:
+        - Do NOT rewrite working code
+        - Do NOT fix MEDIUM or LOW severity issues
+        - Do NOT add code that wasn't there before
+        - Do NOT remove code unless it's a confirmed bug
+        - If no HIGH severity issues exist, return the EXACT original code unchanged
+        - Only make the minimum changes necessary to fix confirmed HIGH severity bugs
 
         Original Code:
         {state["raw_code"]}
         
-        Issues to fix:
-        {truncated_report}""")
+        Review findings:
+        {state["final_report"]}""")
     return {"fixed_code": response.content}
 
 def verify_fix(state: AgentState):
-    print("verifying fix right now.......")
     current_count = state.get("iteration_count", 0)
     truncated = truncate_code(state["fixed_code"], max_chars=1500)
-    response = invoke_with_retry(llm_fast, f"""Review this fixed code and determine if any critical issues remain.
-        Be strict. Check for bugs, security issues, and performance problems.
-        At the very end of your response, on a new line, write exactly one of:
+    response = invoke_with_retry(llm_fast, f"""Review this code and determine if any CRITICAL bugs remain.
+        STRICT RULES:
+        - Only flag confirmed bugs that will cause runtime failures
+        - Do NOT flag style issues, missing docstrings, or theoretical problems
+        - Do NOT flag variables as undefined if they could be defined in parent scope
+        - Do NOT flag working production patterns as issues
+        - If code looks functional, return NO_ISSUES
+        - Only return ISSUES_FOUND if there is a guaranteed runtime error
+
+        At the very end of your response write exactly one of:
         ISSUES_FOUND
         NO_ISSUES
 

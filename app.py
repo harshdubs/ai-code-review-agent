@@ -1,9 +1,10 @@
 import gradio as gr
 from graph import app
 
-def process(code_input):
+def process(code_input, code_context):
     result = app.invoke({
     "code_input": code_input,
+    "code_context": code_context,
     "iteration_count": 0
     })
 
@@ -18,6 +19,12 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
     with gr.Row():    
         code_input = gr.Code(language="python", label="Enter Code / Github URL", max_lines=20)
 
+    code_context = gr.Textbox(
+        label="Code Context (optional)", 
+        placeholder="Describe what this code does, e.g. 'This is a tank control PLC function block, variables are defined in parent program'",
+        lines=3
+        )
+
     with gr.Tabs():
         with gr.TabItem("🛠 Fixed Code"):
             fixed_code = gr.Code(language="python", label="Fixed Code", max_lines=20)
@@ -29,6 +36,8 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
             test_cases = gr.Code(language="python", label="Used Test Cases", lines=10, scale=4)
 
     status = gr.Markdown("Ready")
+
+    
 
     with gr.Row():
         start_button = gr.Button("🚀 Review & Fix", variant="primary", scale=1)
@@ -42,7 +51,7 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
         outputs=[status]
     ).then(
         fn=process,
-        inputs=[code_input],
+        inputs=[code_input, code_context],
         outputs=[fixed_code, final_report, test_cases]
     ).then(
         fn=lambda: "✅ Done",
