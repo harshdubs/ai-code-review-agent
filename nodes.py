@@ -26,7 +26,7 @@ def truncate_code(code: str, max_chars: int = 4000) -> str:
         return code[:max_chars] + "\n... [truncated for processing]"
     return code
 
-def invoke_with_retry(llm, prompt, retries=5, wait=10):
+def invoke_with_retry(llm, prompt, retries=5, wait=8):
     for attempt in range(retries):
         try:
             return llm.invoke(prompt)
@@ -50,16 +50,16 @@ def fetch_code(state: AgentState):
     return {"raw_code": truncate_code(code)}
 
 
-def bug_reviewer(state: AgentState):
+def bug_reviewer_r1(state: AgentState):
     context = state.get("code_context", "")
     context_note = f"Context about this code: {context}\n" if context else ""
     response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for bugs, logic errors, unhandled exceptions, 
         off-by-one errors, null/undefined checks, and incorrect conditions. 
         For each bug found, explain what it is, why it's a problem, and suggest 
         a specific fix. Format as numbered list. Code: {state["raw_code"]}""")  
-    return {"bug_review" : response.content}
+    return {"bug_review_r1" : response.content}
 
-def security_reviewer(state: AgentState):
+def security_reviewer_r1(state: AgentState):
     context = state.get("code_context", "")
     context_note = f"Context about this code: {context}\n" if context else ""
     response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for security vulnerabilities including SQL injection, 
@@ -67,9 +67,9 @@ def security_reviewer(state: AgentState):
         exposed sensitive data, and authentication issues. For each vulnerability found, 
         rate its severity (High/Medium/Low), explain the risk, and suggest a fix. 
         Format as numbered list. Code: {state["raw_code"]}""")
-    return {"security_review" : response.content}
+    return {"security_review_r1" : response.content}
 
-def performance_reviewer(state: AgentState):
+def performance_reviewer_r1(state: AgentState):
     context = state.get("code_context", "")
     context_note = f"Context about this code: {context}\n" if context else ""
     response = invoke_with_retry(llm_fast, f"""{context_note}Review the following code for performance issues including unnecessary loops, 
@@ -77,17 +77,152 @@ def performance_reviewer(state: AgentState):
         blocking operations, and algorithmic complexity issues. For each issue found, 
         explain the impact and suggest an optimized approach. 
         Format as numbered list. Code: {state["raw_code"]}""")
-    return {"performance_review" : response.content}
+    return {"performance_review_r1" : response.content}
 
-def report_generator(state: AgentState):
-    print("report generator running.....")
-    response = invoke_with_retry(llm_fast, f"""Generate a comprehensive code review report by combining the following three reviews.
-        Structure the report with clear sections: Executive Summary, Bug Analysis, Security Analysis, 
-        Performance Analysis, and Overall Recommendations. Prioritize critical issues at the top.
 
-        Bug Review: {state["bug_review"]}
-        Security Review: {state["security_review"]}  
-        Performance Review: {state["performance_review"]}""")
+def bug_reviewer_r2(state: AgentState):
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+
+    bug_r1_short = truncate_code(state["bug_review_r1"], max_chars=800)
+    security_r1_short = truncate_code(state["security_review_r1"], max_chars=800)
+    performance_r1_short = truncate_code(state["performance_review_r1"], max_chars=800)
+
+    response = invoke_with_retry(llm_fast, f"""{context_note}You previously reviewed this code for bugs and found:
+        {bug_r1_short}
+
+        Now read what two other specialists found:
+        
+        Security Reviewer found:
+        {security_r1_short}
+        
+        Performance Reviewer found:
+        {performance_r1_short}
+
+        Based on their findings, revise your bug analysis:
+        - If their findings reveal a bug you missed, add it
+        - If your original finding was actually a false positive given their context, remove it
+        - If you disagree with something they flagged as a bug, explain why
+
+        Return your REVISED and FINAL bug analysis as a numbered list.
+
+        Code: {state["raw_code"]}""")
+    return {"bug_review_r2": response.content}
+
+def security_reviewer_r2(state: AgentState):
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+
+    bug_r1_short = truncate_code(state["bug_review_r1"], max_chars=800)
+    security_r1_short = truncate_code(state["security_review_r1"], max_chars=800)
+    performance_r1_short = truncate_code(state["performance_review_r1"], max_chars=800) 
+
+    response = invoke_with_retry(llm_fast, f"""{context_note}You previously reviewed this code for bugs and found:
+        {security_r1_short}
+
+        Now read what two other specialists found:
+        
+        Bug Reviewer found:
+        {bug_r1_short}
+        
+        Performance Reviewer found:
+        {performance_r1_short}
+
+        What to check for security analysis: 
+        Review the following code for security vulnerabilities including SQL injection, 
+        hardcoded secrets or API keys, unvalidated user inputs, insecure dependencies, 
+        exposed sensitive data, and authentication issues. For each vulnerability found, 
+        rate its severity (High/Medium/Low), explain the risk, and suggest a fix. 
+
+        Based on their findings, revise your security analysis:
+        - If their findings reveal a security concern you missed, add it
+        - If your original finding was actually a false positive given their context, remove it
+        - If you disagree with something they flagged, explain why
+
+        Return your REVISED and FINAL security analysis as a numbered list.
+
+        Code: {state["raw_code"]}""")
+    return {"security_review_r2": response.content}
+
+def performance_reviewer_r2(state: AgentState):
+    context = state.get("code_context", "")
+    context_note = f"Context about this code: {context}\n" if context else ""
+
+    bug_r1_short = truncate_code(state["bug_review_r1"], max_chars=800)
+    security_r1_short = truncate_code(state["security_review_r1"], max_chars=800)
+    performance_r1_short = truncate_code(state["performance_review_r1"], max_chars=800)
+
+    response = invoke_with_retry(llm_fast, f"""{context_note}You previously reviewed this code for bugs and found:
+        {performance_r1_short}
+
+        Now read what two other specialists found:
+        
+        Bug Reviewer found:
+        {bug_r1_short}
+        
+        Security Reviewer found:
+        {security_r1_short}
+
+        What to check for performance analysis: 
+        Review the following code for performance issues including unnecessary loops, 
+        inefficient data structures, redundant API or database calls, memory leaks, 
+        blocking operations, and algorithmic complexity issues. For each issue found, 
+        explain the impact and suggest an optimized approach.  
+
+        Based on their findings, revise your performance analysis:
+        - If their findings reveal a performance concern you missed, add it
+        - If your original finding was actually a false positive given their context, remove it
+        - If you disagree with something they flagged, explain why
+
+        Return your REVISED and FINAL performance analysis as a numbered list.
+
+        Code: {state["raw_code"]}""")
+    return {"performance_review_r2": response.content}
+
+def supervisor(state: AgentState):
+    context = state.get("code_context", "")
+
+    bug_r1_short = truncate_code(state["bug_review_r1"], max_chars=800)
+    security_r1_short = truncate_code(state["security_review_r1"], max_chars=800)
+    performance_r1_short = truncate_code(state["performance_review_r1"], max_chars=800)
+
+    response = invoke_with_retry(llm_fast, f"""You are the supervisor reviewing all findings from three specialist agents across two rounds of analysis.
+
+    Round 1 findings (independent):
+    Bug Reviewer (R1): {bug_r1_short}
+    Security Reviewer (R1): {security_r1_short}
+    Performance Reviewer (R1): {performance_r1_short}
+
+    Round 2 findings (after specialists debated and revised based on each other):
+    Bug Reviewer (R2): {state["bug_review_r2"]}
+    Security Reviewer (R2): {state["security_review_r2"]}
+    Performance Reviewer (R2): {state["performance_review_r2"]}
+
+    Your job:
+    1. Compare R1 vs R2 for each specialist — note what changed and why
+    2. Identify which findings are CONFIRMED real issues (specialists agree, or revised finding is well-justified)
+    3. Discard findings that were retracted or are false positives based on the debate
+    4. Rank confirmed issues by severity: CRITICAL, HIGH, MEDIUM, LOW
+    5. Output ONLY confirmed, actionable issues — nothing speculative
+
+    Format your verdict as:
+    CRITICAL ISSUES: (must fix)
+    HIGH ISSUES: (should fix)
+    MEDIUM/LOW ISSUES: (optional, list only, do not elaborate)
+
+    Code: {state["raw_code"]}""")
+    return {"supervisor_verdict": response.content}
+
+
+def synthesizer(state: AgentState):
+    print("synthesizer running.....")
+    response = invoke_with_retry(llm_fast, f"""Take this supervisor's verdict and expand it into a polished, professional code review report.
+    For each issue listed, add a brief explanation of why it matters and a suggested fix.
+    Structure the report with these sections: Executive Summary, Critical Issues, High Priority Issues, 
+    Other Observations, Final Recommendation.
+    Keep it clear and readable for someone who didn't see the raw debate process.
+
+    Supervisor Verdict: {state["supervisor_verdict"]}""")
     return {"final_report" : response.content}
 
 def code_fixer(state: AgentState):
@@ -105,7 +240,7 @@ def code_fixer(state: AgentState):
         {state["raw_code"]}
         
         Review findings:
-        {state["final_report"]}""")
+        {state["supervisor_verdict"]}""")
     return {"fixed_code": response.content}
 
 def verify_fix(state: AgentState):

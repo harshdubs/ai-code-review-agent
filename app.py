@@ -7,8 +7,34 @@ def process(code_input, code_context):
     "code_context": code_context,
     "iteration_count": 0
     })
+    debate_log = f"""
+    ## Round 1 — Independent Findings
 
-    return result["fixed_code"], result["final_report"], result["test_cases"]
+    **Bug Reviewer:**
+    {result["bug_review_r1"]}
+
+    **Security Reviewer:**
+    {result["security_review_r1"]}
+
+    **Performance Reviewer:**
+    {result["performance_review_r1"]}
+
+    ## Round 2 — After Debate
+
+    **Bug Reviewer (revised):**
+    {result["bug_review_r2"]}
+
+    **Security Reviewer (revised):**
+    {result["security_review_r2"]}
+
+    **Performance Reviewer (revised):**
+    {result["performance_review_r2"]}
+
+    ## Supervisor Verdict
+
+    {result["supervisor_verdict"]}
+    """
+    return result["fixed_code"], result["final_report"], result["test_cases"], debate_log
 
 with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
@@ -35,6 +61,9 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
         with gr.TabItem("🧪 Test Cases"):
             test_cases = gr.Code(language="python", label="Used Test Cases", lines=10, scale=4)
 
+        with gr.TabItem("💬 Agent Debate Log"):
+            debate_log_output = gr.Markdown()
+
     status = gr.Markdown("Ready")
 
     
@@ -43,7 +72,7 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
         start_button = gr.Button("🚀 Review & Fix", variant="primary", scale=1)
         clear_button = gr.Button("Clear", variant="secondary", scale=1)
 
-    clear_button.click(fn=lambda: ("", "", "", ""), outputs=[code_input, fixed_code, final_report, test_cases])
+    clear_button.click(fn=lambda: ("", "", "", "", ""), outputs=[code_input, fixed_code, final_report, test_cases, debate_log_output])
 
 
     start_button.click(
@@ -52,7 +81,7 @@ with gr.Blocks(title="Code Review Agent", theme=gr.themes.Soft()) as demo:
     ).then(
         fn=process,
         inputs=[code_input, code_context],
-        outputs=[fixed_code, final_report, test_cases]
+        outputs=[fixed_code, final_report, test_cases, debate_log_output]
     ).then(
         fn=lambda: "✅ Done",
         outputs=[status]
