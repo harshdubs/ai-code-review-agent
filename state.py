@@ -21,3 +21,5 @@ class AgentState(TypedDict):
 
     supervisor_verdict: str
     debate_log: str
+
+    user_description: str
